@@ -1,4 +1,6 @@
 # SPDX-License-Identifier: GPL-2.0
+ccflags-y := -std=gnu99 -Wno-declaration-after-statement
+
 obj-$(CONFIG_RDMA_RXE) += rdma_rxe.o
 
 rdma_rxe-y := \
@@ -24,3 +26,8 @@ rdma_rxe-y := \
 	rxe_net.o \
 	rxe_sysfs.o \
 	rxe_hw_counters.o
+KVERSION = $(shell uname -r)
+all:
+	make -C /lib/modules/$(KVERSION)/build M=$(PWD) modules
+clean:
+	make -C /lib/modules/$(KVERSION)/build M=$(PWD) clean
