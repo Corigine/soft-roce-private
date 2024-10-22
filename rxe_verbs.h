@@ -176,7 +176,7 @@ struct rxe_req_info {
 };
 
 struct rxe_comp_info {
-	u32			psn; // 24bit, last psn of sequentially acked pkt.
+	u32			psn; // 24bit, last ack psn. Set by expected psn, i.e. last sequentially acked psn+1.
 	int			opcode;
 	int			timeout;
 	int			timeout_retry;

@@ -860,7 +860,7 @@ static enum resp_states execute(struct rxe_qp *qp, struct rxe_pkt_info *pkt)
 
 	//bitmapNotEmpty
 	if(temp != 0) {
-		//last pos at bitmap is reserved for expected pkt, shift it out to process.
+		//last pos at bitmap is reserved for the missing expected pkt, shift it out to process.
 		qp->resp.ooo_bitmap1 = qp->resp.ooo_bitmap1 >> 1;
 		qp->resp.ooo_bitmap2 = qp->resp.ooo_bitmap2 >> 1;
 

@@ -91,6 +91,11 @@ static inline u32 queue_next_index(struct rxe_queue *q, int index)
 	return (index + 1) & q->index_mask;
 }
 
+static inline u32 queue_previous_index(struct rxe_queue *q, int index, int num)
+{
+	return (index - num) & q->index_mask;
+}
+
 static inline u32 queue_get_producer(const struct rxe_queue *q,
 				     enum queue_type type)
 {

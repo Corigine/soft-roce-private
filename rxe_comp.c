@@ -179,7 +179,7 @@ static inline enum comp_state check_psn(struct rxe_qp *qp,
 	/* check to see if response is past the oldest WQE. if it is, complete
 	 * send/write or error read/atomic
 	 */
-	pr_alert("received ack psn is %d", pkt->psn);
+	//pr_alert("received ack psn is %d", pkt->psn);
 	diff = psn_compare(pkt->psn, wqe->last_psn);
 	if (diff > 0) {
 		if (wqe->state == wqe_state_pending) {
@@ -342,7 +342,7 @@ static inline enum comp_state check_ack(struct rxe_qp *qp,
 					}
 				}
 				return COMPST_ERROR_RETRY;*/
-				if (psn_compare(cumAck, qp->comp.psn) > 0) {
+				if (psn_compare(cumAck, qp->comp.psn) >= 0) {
 					rxe_counter_inc(rxe,
 							RXE_CNT_RCV_SEQ_ERR);
 					if (qp->req.wait_psn) {
@@ -511,73 +511,49 @@ static int do_complete(struct rxe_qp *qp, struct rxe_send_wqe *wqe, u8 numCQEdon
 {
 	struct rxe_dev *rxe = to_rdev(qp->ibqp.device);
 	struct rxe_cqe cqe;
+	bool post;
+	unsigned int index;
+	//pr_alert("numCQEdone is %d", numCQEdone);
+	u8 iter = 0;
+	struct rxe_send_wqe *wqee;
+	for(iter = numCQEdone; iter > 0; iter--)
+	{
+		//pr_alert("iter is %d", iter);
+		index = queue_previous_index(qp->sq.queue,
+						     queue_index_from_addr(qp->sq.queue, wqe), iter - 1);
+		/*pr_alert("index is %d, wqe_index is %d, w index is %d", index, 
+					qp->req.wqe_index, queue_index_from_addr(qp->sq.queue, wqe));*/
+		wqee = queue_addr_from_index(qp->sq.queue, index);
 
-	int err;
-	struct rxe_sq *ssq = &qp->ssq;
-	struct rxe_send_wqe *save_send_wqe;
-	struct rxe_send_wqe *expire_send_wqe;
-	unsigned long flags;
-	unsigned int save_wqe_index;
+		/* do we need to post a completion */
+		post = ((qp->sq_sig_type == IB_SIGNAL_ALL_WR) ||
+				(wqee->wr.send_flags & IB_SEND_SIGNALED) ||
+				wqee->status != IB_WC_SUCCESS);
+	
+		if (post)
+			make_send_cqe(qp, wqee, &cqe);
 
-	if ((qp->sq_sig_type == IB_SIGNAL_ALL_WR) ||
-	    (wqe->wr.send_flags & IB_SEND_SIGNALED) ||
-	    wqe->status != IB_WC_SUCCESS) {
-		spin_lock_irqsave(&qp->ssq.sq_lock, flags);
-
-		if (unlikely(queue_full(ssq->queue, QUEUE_TYPE_FROM_CLIENT))) {
-			err = -ENOMEM;
-			goto err1;
-		}
-
-		save_send_wqe = queue_producer_addr(ssq->queue, QUEUE_TYPE_FROM_CLIENT);
-		*save_send_wqe = *wqe;
-
-		queue_advance_producer(ssq->queue,QUEUE_TYPE_TO_CLIENT);
-		spin_unlock_irqrestore(&qp->ssq.sq_lock, flags);
-		pr_alert("wqe saved");
-
-
-		if(unlikely(queue_empty(ssq->queue, QUEUE_TYPE_FROM_CLIENT))){
-			err = -ENOMEM;
-			return err;
-		}
-
-		while (numCQEdone != 0 && !queue_empty(ssq->queue, QUEUE_TYPE_FROM_CLIENT)) {
-		expire_send_wqe = queue_head(qp->ssq.queue, QUEUE_TYPE_FROM_CLIENT);
-
-		make_send_cqe(qp, expire_send_wqe, &cqe);
-		rxe_cq_post(qp->scq, &cqe, 0);
-		queue_advance_consumer(qp->ssq.queue, QUEUE_TYPE_FROM_CLIENT);
-
-		numCQEdone--;
-		pr_alert("cqe posted");
-		}
-		spin_lock_irqsave(&qp->sq.sq_lock, flags);
 		queue_advance_consumer(qp->sq.queue, QUEUE_TYPE_FROM_CLIENT);
-		spin_unlock_irqrestore(&qp->sq.sq_lock, flags);
-		pr_alert("sq advanced");
-	} else {
-		queue_advance_consumer(qp->sq.queue, QUEUE_TYPE_FROM_CLIENT);
-		pr_alert("sq advance without cqe");
+
+		if (post)
+			rxe_cq_post(qp->scq, &cqe, 0);
+
+		if (wqee->wr.opcode == IB_WR_SEND ||
+	    	wqee->wr.opcode == IB_WR_SEND_WITH_IMM ||
+	    	wqee->wr.opcode == IB_WR_SEND_WITH_INV)
+			rxe_counter_inc(rxe, RXE_CNT_RDMA_SEND);
+
+		//numCQEdone--;
 	}
-
-	if (wqe->wr.opcode == IB_WR_SEND ||
-	    wqe->wr.opcode == IB_WR_SEND_WITH_IMM ||
-	    wqe->wr.opcode == IB_WR_SEND_WITH_INV)
-		rxe_counter_inc(rxe, RXE_CNT_RDMA_SEND);
-
 	/*
-	 * we completed something so let req run again
-	 * if it is trying to fence
-	 */
+	* we completed something so let req run again
+	* if it is trying to fence
+	*/
 	if (qp->req.wait_fence) {
 		qp->req.wait_fence = 0;
 		rxe_run_task(&qp->req.task, 0);
 	}
 	return 0;
-	err1:
-	spin_unlock_irqrestore(&qp->ssq.sq_lock, flags);
-	return err;
 }
 
 static inline enum comp_state complete_ack(struct rxe_qp *qp,
