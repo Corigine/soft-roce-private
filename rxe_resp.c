@@ -938,11 +938,12 @@ static enum resp_states execute(struct rxe_qp *qp, struct rxe_pkt_info *pkt)
 	if (pkt->mask & RXE_END_MASK) {
 		/* Last packet. */
 		qp->resp.msn++;
+		qp->resp.numCQEdone++;
 	}
 	if (pkt->mask & RXE_COMP_MASK) {
 		/* We successfully processed this new request. */
 		//qp->resp.msn++;
-		qp->resp.numCQEdone++;
+		//qp->resp.numCQEdone++;
 		return RESPST_COMPLETE;
 	} else if (qp_type(qp) == IB_QPT_RC)
 		return RESPST_ACKNOWLEDGE;
